@@ -1,6 +1,9 @@
+import os
+
+import boto3
 from flask import Flask, jsonify, request
 from dotenv import load_dotenv
-import os
+
 import ec2_vpn
 
 if not os.getenv('AWS_EXECUTION_ENV'):
@@ -11,12 +14,25 @@ if not os.getenv('AWS_EXECUTION_ENV'):
 
 app = Flask(__name__)
 
-@app.route('/instances', methods=['GET', 'POST', 'DELETE'])
-def manage_instances():
-    # Get the AWS region from the aws-region header.
-    # If one wasn't specified, we default to us-east-1:
-    region = request.headers.get('aws-region', 'us-east-1')
-    instances = ec2_vpn.list_instances(region=region)
+# Build a list of valid AWS regions (e.g us-east-1) for EC2.
+# These will be validated for every request
+region_response = boto3.client('ec2').describe_regions()
+aws_regions = [endpoint['RegionName'] for endpoint in region_response['Regions']]
+
+@app.route('/instances/<string:region>', methods=['GET', 'POST', 'DELETE'])
+def manage_instances(region):
+    # Get the AWS region from the URL, and validate it:
+    if region not in aws_regions:
+        return jsonify(error=f"Region {region} is not a valid AWS region name for EC2."), 400
+    # If it's valid, fetch a list of instances outright (more than one method
+    # uses this list so we'll factor it out):
+    try:
+        instances = ec2_vpn.list_instances(region=region)
+    except Exception as e:
+        print(f"Error fetching instances: {e}")
+        return jsonify(error="An error occured while fetching the list of running instances"), 500
+    
+    # This should correspond to a valid EC2 launch template in the region of interest:
     template = os.getenv('LAUNCH_TEMPLATE_NAME')
 
     if request.method == 'GET':
@@ -37,7 +53,7 @@ def manage_instances():
                 region=region,
                 instance_id=new_instance[0],
                 ip=new_instance[1]
-            )
+            ), 200
         else:
             return jsonify(error=f"An instance is already running in the {region} region. Please terminate it first"), 429
     elif request.method == 'DELETE':
