@@ -46,7 +46,7 @@ def list_instances(region='us-east-1'):
         Filters=[
             {
                 'Name': 'instance-state-name',
-                'Values': ['running']
+                'Values': ['running', 'pending']
             },
             {
                 'Name': 'tag:instance_type',
