@@ -60,8 +60,8 @@ def list_instances(region='us-east-1'):
         try:
             instances = [(x['Instances'][0]['InstanceId'], x['Instances'][0]['PublicIpAddress']) for x in reservations]
         except Exception as e:
-            print(e)
-            instances = []
+            print(f'Error fetching instance list: {e}')
+            raise
     return instances
 
 def terminate_instances(region='us-east-1'):
