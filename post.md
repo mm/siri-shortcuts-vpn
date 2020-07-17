@@ -130,3 +130,54 @@ For Lambda to be able to perform EC2 actions on your behalf (starting servers up
 Fill in the `AWS_REGION`, `ACCOUNT_ID` and `LAUNCH_TEMPLATE_ID` with the AWS region you made your EC2 launch template in (for example, I used `us-east-1`), your AWS account ID (numeric) and your launch template ID from the last section.
 
 This policy allows your function to describe details about any EC2 instance, create new instances *only* from your launch template, create tags on any instance, and only start/stop/terminate instances tagged as VPNs. For more examples of policies if you're interested (as they relate to EC2 instances), [Amazon's docs](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ExamplePolicies_EC2.html#iam-example-runinstances) have a wealth of info.
+
+### Creating a test IAM user with the IAM policy
+
+This step is technically optional, but it allows you to test out the code locally before deploying. Here we'll create an IAM *user* and attach our *policy* to it. 
+
+1. Log in to your AWS Console > Services > IAM. Select "Users" from the sidebar, and click "Add user".
+
+2. Give the user a username (doesn't matter) and make sure **Programmatic access** is checked.
+
+3. Click Next, and click "Attach existing policies directly". Search for your policy, ensure it's checked and click Next again. You can leave tags blank. Finally, click Create user. Make note of the *Access key ID* and *Secret access key* -- we will be using these shortly.
+
+### Working with the code locally
+
+With all of the policy setup out of the way, we're ready to go! Now, we'll deploy a web service I wrote using Flask to Lambda. First, we'll test the code locally, and once it's working, we'll use [Zappa](https://github.com/Miserlou/Zappa) to automate deployment. These instructions are also on my [GitHub repo](https://github.com/mm/siri-shortcuts-vpn) for this project.
+
+1. Ensure you've installed the [AWS CLI](https://aws.amazon.com/cli/), [configured your environment](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html) and have Python 3 and pip ready to go for local development. 
+
+2. Clone this repository in a directory of your choosing: `git clone git@github.com:mm/siri-shortcuts-vpn.git`
+
+3. I recommend setting up a [virtual environment](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/) for this project to keep its dependencies/versions of those dependencies separate from other projects. 
+
+4. Install the packages this code relies on: `pip install -r requirements.txt`
+
+5. Create an `.env` file at the root level of the project and fill in the following environment variables. This will allow you to simulate using the IAM policy you created in tutorial to ensure it works before deploying.
+
+```
+AWS_ACCESS_KEY_ID=ACCESS_KEY_ID_YOU_JUST_CREATED
+AWS_SECRET_ACCESS_KEY=SECRET_ACCESS_KEY_YOU_JUST_CREATED
+AWS_DEFAULT_REGION=fill_in_your_aws_region_here
+LAUNCH_TEMPLATE_NAME=fill_in_your_launch_template_name_here
+```
+
+6. If everything is in order, you should be able to run ```python3 app.py``` in the root directory to start up the Flask development server. Look out for the command's output. By default, the server will be listening for connections on port 5000.
+
+7. Try making HTTP requests to your server! You can use cURL, [httpie](https://httpie.org), [Paw](https://paw.cloud), [Postman](https://www.postman.com) or any API testing tool you'd like. For example, if I was trying to deploy instances in the US-East-1 region (and that's where my launch template was stored), with cURL I'd make this request to try starting up:
+
+```bash
+curl -X POST http://localhost:5000/instances/us-east-1
+```
+
+If successful I should get a response like this:
+
+```
+{"instance_id":"i-some-instance-id","ip":"<some ip address>","region":"us-east-1"}
+```
+
+Getting running instances can be done via a GET request (i.e. ```curl -X GET http://localhost:5000/instances/us-east-1```) and terminating instances in a region can be done via a DELETE request (```curl -X DELETE http://localhost:5000/instances/us-east-1```). The code attempts to make sure only 1 instance is running at a time (to protect against accidentally starting many instances at once) -- so DELETE works as intended (deletes the whole collection of instances, but that collection is only supposed to contain 1 instance at a time).
+
+Once you're sure everything is working okay, let's deploy to Lambda!
+
+## Deploying to Lambda and API Gateway
