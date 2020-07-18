@@ -181,3 +181,78 @@ Getting running instances can be done via a GET request (i.e. ```curl -X GET htt
 Once you're sure everything is working okay, let's deploy to Lambda!
 
 ## Deploying to Lambda and API Gateway
+
+For deployment, we could totally wrap up our Flask app ourselves and set up API Gateway to send requests to it. However, this would take a little time and is a bit beyond the scope of this tutorial. [Zappa](https://github.com/Miserlou/Zappa) is an open-source Python tool I've been using for a while now. It can:
+
+* Wrap your code up (including all dependencies) in a `.zip` package that is automatically uploaded to Lambda
+* Create an [AWS API gateway](https://aws.amazon.com/api-gateway/) endpoint (and help you secure it with an API key/another form of authorization). This endpoint is set up as a [Lambda proxy integration](https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-lambda-proxy-integrations.html), where API Gateway passes all request data (method, headers, etc.) to your Lambda function transparently. This means you can set up routing in your Flask, Django or (insert framework here) app and not have to fiddle too much with routing in API Gateway. 
+
+... among other things! I highly recommend checking out the docs for Zappa, it's an extremely useful tool for serverless apps like this.
+
+1. While in the project directory from before (and in your virtual environment), run `zappa init` in your terminal. You should get something like this:
+
+![After running zappa init, you should be presented with a setup dialog in your terminal](img/zappa_init.png)
+
+2. Go through the setup steps and keep the default options as you go through. Open up your `zappa_settings.json` file. Mine looks like this:
+
+```json
+{
+    "dev": {
+        "app_function": "app.app",
+        "aws_region": "us-east-1",
+        "profile_name": "default",
+        "project_name": "siri-shortcuts-",
+        "runtime": "python3.8",
+        "s3_bucket": "zappa-9bh21r44r"
+    }
+}
+```
+
+3. First, ensure your `aws_region` value matches the AWS region your EC2 template is located in. If not, change that (I've been using `us-east-1` throughout this tutorial). Next, we're going to add two keys: `api_key_required` (to secure our API with an API key) and another key `aws_environment_variables` to set environment variables in the Lambda environment (currently we only need one for our launch template name):
+
+```json
+{
+    "dev": {
+        "app_function": "app.app",
+        "aws_region": "us-east-1",
+        "profile_name": "default",
+        "project_name": "siri-shortcuts-",
+        "runtime": "python3.8",
+		"s3_bucket": "zappa-9bh21r44r",
+		"api_key_required": true,
+		"aws_environment_variables": {
+			"LAUNCH_TEMPLATE_NAME": "Your launch template name here"
+		}
+    }
+}
+```
+
+4. Save `zappa_settings.json`. We should be good to go! Assuming you named your stage `dev` (as in Zappa setup), you can run `zappa deploy dev` in your terminal! (Side note: Zappa supports deploying multiple stages! i.e. You could have totally different environment variables/security settings for the dev vs. prod vs. staging vs. whatever stage you want. Very cool!) This could take a few minutes while dependencies are packaged and uploaded. There should be a bunch of output. At the end, you should see something like this:
+
+```bash
+Deploying API Gateway..
+Created a new x-api-key: zgjcmuieo1
+Deployment complete!: https://bsy9qfjo7k.execute-api.us-east-1.amazonaws.com/dev
+```
+
+5. That URL is actually our endpoint URL! We'll be making requests to it soon. As you can see from the last step, an API Key was created for our project, but it hasn't been associated with our endpoint yet. Let's secure that now. Sign into your AWS Console > API Gateway. You should see your project listed as an API! If not, ensure your region is set to the one you used in `zappa_settings.json`. Click on it, and then click on Usage Plans.
+
+6. Create a new usage plan (it can be named whatever you want), and enable throttling. I keep mine restrictive since I'm the only one supposed to be using it anyway: at 1 request per second and 1000 per month. Hit "Next."
+
+7. Add your API there! Click "Add API Stage" and then choose your API from the list, as well as the `dev` stage. Click the grey checkmark and hit "Next". Click "Add API Key to Usage Plan". 
+
+8. For the "Name", search `dev_` plus the beginning of your endpoint URL. For example, Zappa outputted `https://bsy9qfjo7k.execute-api.us-east-1.amazonaws.com/dev` in step 4, so I chose `dev_bsy9qfjo7k`:
+
+![Searching for my API key using the endpoint Zappa gave me](img/finding_api_key.png)
+
+9. Hit the grey checkmark, click "Done" and you're good to go! You should see a list of Usage Plans on your account. Click the one you just created then "API Keys". Click the API key you added, and then click "Show" where it says **API key**. Make note of this key as it's the key you'll use to make requests!
+
+10. Head to Services > Lambda in your console. Again, you should see the Zappa-created Lambda function there. Click on it, then click on "Permissions". You should see an execution role listed there. Click on it. This is the role your Lambda function uses, and to add extra permissions to it (the ability to launch and shut down EC2 instances), we'll attach the policy we created earlier.
+
+11. Click on the "Attach policies" button, and search for the IAM policy you created a few sections back. Select it, and click "Attach policy". That's all!
+
+After all this work, it's finally time to test it! Here I'm using cURL, but you can use whatever API testing tool you want:
+
+```bash
+>>> curl -H "x-api-key: TRsDypMkdT9Yl6dRpDCPQ3gM9IftVjK18iySHDC3" https://bsy9qfjo7k.execute-api.us-east-1.amazonaws.com/dev/instances/us-east-1
+```
