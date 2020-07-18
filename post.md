@@ -229,7 +229,7 @@ For deployment, we could totally wrap up our Flask app ourselves and set up API 
 
 4. Save `zappa_settings.json`. We should be good to go! Assuming you named your stage `dev` (as in Zappa setup), you can run `zappa deploy dev` in your terminal! (Side note: Zappa supports deploying multiple stages! i.e. You could have totally different environment variables/security settings for the dev vs. prod vs. staging vs. whatever stage you want. Very cool!) This could take a few minutes while dependencies are packaged and uploaded. There should be a bunch of output. At the end, you should see something like this:
 
-```bash
+```console
 Deploying API Gateway..
 Created a new x-api-key: zgjcmuieo1
 Deployment complete!: https://bsy9qfjo7k.execute-api.us-east-1.amazonaws.com/dev
@@ -253,6 +253,24 @@ Deployment complete!: https://bsy9qfjo7k.execute-api.us-east-1.amazonaws.com/dev
 
 After all this work, it's finally time to test it! Here I'm using cURL, but you can use whatever API testing tool you want:
 
-```bash
->>> curl -H "x-api-key: TRsDypMkdT9Yl6dRpDCPQ3gM9IftVjK18iySHDC3" https://bsy9qfjo7k.execute-api.us-east-1.amazonaws.com/dev/instances/us-east-1
+```console
+> curl -H "x-api-key: api_key_here" -X GET https://bsy9qfjo7k.execute-api.us-east-1.amazonaws.com/dev/instances/us-east-1
+
+{"region":"us-east-1","running_instances":[]}
+```
+
+If we want to start up an instance, we POST to the endpoint instead. We can see we get back the server's IP in the response (we can use this to connect!)
+
+```console
+$ curl -H "x-api-key: api_key_here" -X POST https://bsy9qfjo7k.execute-api.us-east-1.amazonaws.com/dev/instances/us-east-1
+
+{"instance_id":"i-09912cc4f30e020d7","ip":"54.236.255.219","region":"us-east-1"}
+```
+
+And if we want to delete the instance, we can send a DELETE request and get some info about how many instances we terminated and where:
+
+```console
+$ curl -H "x-api-key: api_key_here" -X DELETE https://bsy9qfjo7k.execute-api.us-east-1.amazonaws.com/dev/instances/us-east-1
+
+{"instances_terminated":1,"region":"us-east-1"}
 ```
