@@ -23,6 +23,7 @@ def manage_instances(region):
         aws_regions = [endpoint['RegionName'] for endpoint in region_response['Regions']]
     except Exception as e:
         print('Error retrieving list of valid AWS regions -- did you attach the correct IAM policy?')
+        return jsonify(error='Error discovering valid AWS regions: please check IAM policy'), 500
 
     # Get the AWS region from the URL, and validate it:
     if region not in aws_regions:

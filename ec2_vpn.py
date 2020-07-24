@@ -24,7 +24,7 @@ def launch_instance(launch_template_name, region='us-east-1'):
             }
         )
         instance_id = response['Instances'][0]['InstanceId']
-        time.sleep(1)
+        time.sleep(2)  # As it turns out, sometimes it takes time for an IP to be assigned
         instance = boto3.resource('ec2', region_name=region).Instance(instance_id)
         return (instance_id, instance.public_ip_address)
     except Exception as e:
@@ -32,10 +32,9 @@ def launch_instance(launch_template_name, region='us-east-1'):
         return None
 
 def list_instances(region='us-east-1'):
-    """Returns a list of tuples describing running
-    EC2 instances (tagged as VPNs). The first element
-    represents the instance ID (InstanceId) and the second
-    represents the instance's public IPv4 address (PublicIpAddress)
+    """Returns a list of dicts describing running EC2 instances
+    (tagged as VPNs). The `id` key represents the instance ID (InstanceId)
+    and the `ip` key represents the instance's public IPv4 address (PublicIpAddress)
 
     Arguments:
     region -- The AWS region to check for instances in (default: us-east-1)
@@ -58,7 +57,7 @@ def list_instances(region='us-east-1'):
     instances = []
     if reservations:
         try:
-            instances = [(x['Instances'][0]['InstanceId'], x['Instances'][0]['PublicIpAddress']) for x in reservations]
+            instances = [{'id': x['Instances'][0]['InstanceId'], 'ip': x['Instances'][0]['PublicIpAddress']} for x in reservations]
         except Exception as e:
             print(f'Error fetching instance list: {e}')
             raise
@@ -77,7 +76,7 @@ def terminate_instances(region='us-east-1'):
     s = boto3.client('ec2', region_name=region)
     # Get currently running VPNs:
     instances = list_instances(region=region)
-    instance_ids = [x[0] for x in instances]
+    instance_ids = [x['id'] for x in instances]
 
     # Terminate any all at once:
     if len(instance_ids) > 0:

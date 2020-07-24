@@ -283,10 +283,10 @@ $ curl -H "x-api-key: api_key_here" -X DELETE https://bsy9qfjo7k.execute-api.us-
 
 ## Making use of our API with Shortcuts
 
-Since we've created a web service, technically anything capable of making an HTTP request (and passing headers for our API key) should be able to trigger our function. For this guide, we'll use [Shortcuts](https://apps.apple.com/us/app/shortcuts/id915249334), an iOS app by Apple. Of the many actions Shortcuts has, "Get Contents of URL" is the one we'll be using as it can make arbitrary HTTP requests and output the results. I've made 3 shortcuts for you to use and look through how they work. Click on them to install the shortcut on your iOS device (it'll ask a few questions on import like what your endpoint URL and API key are) and review what they do before running them. 
+Since we've created a web service, technically anything capable of making an HTTP request (and passing headers for our API key) should be able to trigger our function. For this guide, we'll use [Shortcuts](https://apps.apple.com/us/app/shortcuts/id915249334), an iOS app by Apple. Of the many actions Shortcuts has, "Get Contents of URL" is the primary workhorse we'll be using as it can make arbitrary HTTP requests and output the results. I've made 3 shortcuts for you to use and look through how they work. Click on them to install the shortcut on your iOS device (it'll ask a few questions on import like what your endpoint URL and API key are) and review what they do before running them. 
 
 * [Start EC2 VPN](https://www.icloud.com/shortcuts/1b8b413d86a344aabde5930c5efc05f3): This will make a POST request to your endpoint to start a new server up. If successful, it will copy the server's IP to your clipboard.
-* [List running VPNs](): This will make a GET request to your endpoint and return the number of servers running (should at most be 1)
+* [List running VPNs](https://www.icloud.com/shortcuts/a59e74bd60fc4af49a2d71738756bbd5): This will make a GET request to your endpoint, and afterwards return the number of servers running (should at most be 1) and copy the IP address to your clipboard.
 * [Terminate EC2 VPN](https://www.icloud.com/shortcuts/0fe871b3e1f84834a12d6af9a15e2eea): This will terminate all VPN instances running in a given region, and tell you how many instances were terminated.
 
 To get Siri up and running, simply tell Siri to "Run Shortcut Name", for example "Run Start EC2 VPN" to launch a new VPN.
