@@ -2,7 +2,7 @@
 
 Sometimes you need a VPN for a short period of time (like when you'll be on public Wi-Fi for a little while). [Amazon EC2](https://aws.amazon.com/ec2/) makes deploying servers to be used as VPNs for this purpose pretty simple and cost-effective since you're only charged from the time you start until the instance's termination. Open-source projects like [setup-ipsec-vpn](https://github.com/hwdsl2/setup-ipsec-vpn) make this even easier. However, this requires you to get onto the AWS Console to get everything set up, which can be a bit of a pain. The motivation for this project was to be able to do this:
 
-![Asking Siri to create a VPN for me, then returning the VPN's IP address to connect to]()
+![Asking Siri to create a VPN for me, then returning the VPN's IP address to connect to](img/siri-demo.gif)
 
 To do this, we're going to be deploying some Python code as a Lambda function with AWS. This code will start/stop EC2 instances for us and run the [setup-ipsec-vpn](https://github.com/hwdsl2/setup-ipsec-vpn) script on them automatically. We'll use AWS [API Gateway](https://aws.amazon.com/api-gateway/) to create a RESTful API that will trigger this function. Then, we'll use Apple's [Shortcuts](https://apps.apple.com/us/app/shortcuts/id915249334) app to make a request to the API endpoint we create. 
 
@@ -16,7 +16,9 @@ To do this, we're going to be deploying some Python code as a Lambda function wi
 
 * The Python function will limit you to deploying only in one AWS region at a time, since EC2 Launch Templates (which we'll use) are tied to a region. Here we use `us-east-1` as our region.
 
-* About AWS charges: Some of the services used in this post are intended to fall within the free tier usage, however some do not. Lambda offers 1 million Lambda requests every month even once your free-tier access expires, while API Gateway only offers 1 million requests per month for the first year, and EC2 offers 750 hours per month on t2.micro instances (what we're using) for the first year. Make sure to review pricing for [Lambda](https://aws.amazon.com/lambda/pricing/), [API Gateway](https://aws.amazon.com/api-gateway/pricing/) and [EC2](https://aws.amazon.com/ec2/pricing/on-demand/) before continuing.
+* **About AWS charges:** Some of the services used in this post are intended to fall within the free tier usage, however some do not. Lambda offers 1 million Lambda requests every month even once your free-tier access expires, while API Gateway only offers 1 million requests per month for the first year, and EC2 offers 750 hours per month on t2.micro instances (what we're using) for the first year. Make sure to review pricing for [Lambda](https://aws.amazon.com/lambda/pricing/), [API Gateway](https://aws.amazon.com/api-gateway/pricing/) and [EC2](https://aws.amazon.com/ec2/pricing/on-demand/) before continuing. Also, as we test things out in this tutorial, do keep an eye on your AWS console to make sure anything you created to test with gets deleted to avoid incurring extra charges.
+
+* This is more of a proof-of-concept than anything else! I'd welcome any feedback on how to make it more secure in the future.
 
 Let's get started!
 
@@ -162,12 +164,12 @@ AWS_DEFAULT_REGION=fill_in_your_aws_region_here
 LAUNCH_TEMPLATE_NAME=fill_in_your_launch_template_name_here
 ```
 
-6. If everything is in order, you should be able to run ```python3 app.py``` in the root directory to start up the Flask development server. Look out for the command's output. By default, the server will be listening for connections on port 5000.
+6. If everything is in order, you should be able to run `python3 app.py` in the root directory to start up the Flask development server. Look out for the command's output. By default, the server will be listening for connections on port 5000.
 
 7. Try making HTTP requests to your server! You can use cURL, [httpie](https://httpie.org), [Paw](https://paw.cloud), [Postman](https://www.postman.com) or any API testing tool you'd like. For example, if I was trying to deploy instances in the US-East-1 region (and that's where my launch template was stored), with cURL I'd make this request to try starting up:
 
-```bash
-curl -X POST http://localhost:5000/instances/us-east-1
+```console
+$ curl -X POST http://localhost:5000/instances/us-east-1
 ```
 
 If successful I should get a response like this:
@@ -254,7 +256,7 @@ Deployment complete!: https://bsy9qfjo7k.execute-api.us-east-1.amazonaws.com/dev
 After all this work, it's finally time to test it! Here I'm using cURL, but you can use whatever API testing tool you want:
 
 ```console
-> curl -H "x-api-key: api_key_here" -X GET https://bsy9qfjo7k.execute-api.us-east-1.amazonaws.com/dev/instances/us-east-1
+$ curl -H "x-api-key: api_key_here" -X GET https://bsy9qfjo7k.execute-api.us-east-1.amazonaws.com/dev/instances/us-east-1
 
 {"region":"us-east-1","running_instances":[]}
 ```
@@ -267,10 +269,26 @@ $ curl -H "x-api-key: api_key_here" -X POST https://bsy9qfjo7k.execute-api.us-ea
 {"instance_id":"i-09912cc4f30e020d7","ip":"54.236.255.219","region":"us-east-1"}
 ```
 
-And if we want to delete the instance, we can send a DELETE request and get some info about how many instances we terminated and where:
+Note that if you try and run this when a VPN is already running, the function will return a 429 - Too Many Requests response instead. This is to prevent accidentally starting too many instances up and incurring charges.
+
+To connect to your instance, wait a few minutes and then follow [this guide](https://github.com/hwdsl2/setup-ipsec-vpn/blob/master/docs/clients.md). Use the IP address your function outputs, as well as the key, username and password you set way back when you made the EC2 launch template! You should have an up and running VPN.
+
+If we want to delete the instance, we can send a DELETE request and get some info about how many instances we terminated and where (or, we could go to our EC2 dashboard manually as always)
 
 ```console
 $ curl -H "x-api-key: api_key_here" -X DELETE https://bsy9qfjo7k.execute-api.us-east-1.amazonaws.com/dev/instances/us-east-1
 
 {"instances_terminated":1,"region":"us-east-1"}
 ```
+
+## Making use of our API with Shortcuts
+
+Since we've created a web service, technically anything capable of making an HTTP request (and passing headers for our API key) should be able to trigger our function. For this guide, we'll use [Shortcuts](https://apps.apple.com/us/app/shortcuts/id915249334), an iOS app by Apple. Of the many actions Shortcuts has, "Get Contents of URL" is the one we'll be using as it can make arbitrary HTTP requests and output the results. I've made 3 shortcuts for you to use and look through how they work. Click on them to install the shortcut on your iOS device (it'll ask a few questions on import like what your endpoint URL and API key are) and review what they do before running them. 
+
+* [Start EC2 VPN](https://www.icloud.com/shortcuts/1b8b413d86a344aabde5930c5efc05f3): This will make a POST request to your endpoint to start a new server up. If successful, it will copy the server's IP to your clipboard.
+* [List running VPNs](): This will make a GET request to your endpoint and return the number of servers running (should at most be 1)
+* [Terminate EC2 VPN](https://www.icloud.com/shortcuts/0fe871b3e1f84834a12d6af9a15e2eea): This will terminate all VPN instances running in a given region, and tell you how many instances were terminated.
+
+To get Siri up and running, simply tell Siri to "Run Shortcut Name", for example "Run Start EC2 VPN" to launch a new VPN.
+
+That's all there is to it! Thanks for checking out this tutorial/demonstration; it's been helpful for me in the past and was fun to try out so I hope it helps you too! This is one of the first technical tutorials I've written publicly, so I'd really appreciate any feedback you have!

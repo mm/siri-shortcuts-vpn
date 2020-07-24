@@ -14,13 +14,16 @@ if not os.getenv('AWS_EXECUTION_ENV'):
 
 app = Flask(__name__)
 
-# Build a list of valid AWS regions (e.g us-east-1) for EC2.
-# These will be validated for every request
-region_response = boto3.client('ec2').describe_regions()
-aws_regions = [endpoint['RegionName'] for endpoint in region_response['Regions']]
-
 @app.route('/instances/<string:region>', methods=['GET', 'POST', 'DELETE'])
 def manage_instances(region):
+    # Build a list of valid AWS regions (e.g us-east-1) for EC2.
+    # These will be validated for every request
+    try:
+        region_response = boto3.client('ec2').describe_regions()
+        aws_regions = [endpoint['RegionName'] for endpoint in region_response['Regions']]
+    except Exception as e:
+        print('Error retrieving list of valid AWS regions -- did you attach the correct IAM policy?')
+
     # Get the AWS region from the URL, and validate it:
     if region not in aws_regions:
         return jsonify(error=f"Region {region} is not a valid AWS region name for EC2."), 400
