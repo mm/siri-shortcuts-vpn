@@ -6,7 +6,11 @@ Sometimes you need a VPN for a short period of time (like when you'll be on publ
 
 (It works on iOS 13 too 😊)
 
-To do this, we're going to be deploying some Python code as a Lambda function with AWS. This code will start/stop EC2 instances for us and run the [setup-ipsec-vpn](https://github.com/hwdsl2/setup-ipsec-vpn) script on them automatically. We'll use AWS [API Gateway](https://aws.amazon.com/api-gateway/) to create a RESTful API that will trigger this function. Then, we'll use Apple's [Shortcuts](https://apps.apple.com/us/app/shortcuts/id915249334) app to make a request to the API endpoint we create. 
+To do this, we're going to be deploying some Python code as a Lambda function with AWS. This code will start/stop EC2 instances for us and run the [setup-ipsec-vpn](https://github.com/hwdsl2/setup-ipsec-vpn) script on them automatically. We'll use AWS [API Gateway](https://aws.amazon.com/api-gateway/) to create a RESTful API that will trigger this function. Then, we'll use Apple's [Shortcuts](https://apps.apple.com/us/app/shortcuts/id915249334) app to make a request to the API endpoint we create. Visually, this is what's going on:
+
+![A small diagram depicting the flow of information between the different AWS services](img/workflow.png)
+
+(Icons used above can be found at [AWS](https://aws.amazon.com/architecture/icons/))
 
 ## What you need:
 
