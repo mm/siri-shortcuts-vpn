@@ -6,7 +6,7 @@ Sometimes you need a VPN for a short period of time (like when you'll be on publ
 
 (It works on iOS 13 too 😊)
 
-To do this, we're going to be deploying some Python code as a Lambda function with AWS. This code will start/stop EC2 instances for us and run the [setup-ipsec-vpn](https://github.com/hwdsl2/setup-ipsec-vpn) script on them automatically. We'll use AWS [API Gateway](https://aws.amazon.com/api-gateway/) to create a RESTful API that will trigger this function. Then, we'll use Apple's [Shortcuts](https://apps.apple.com/us/app/shortcuts/id915249334) app to make a request to the API endpoint we create. Visually, this is what's going on:
+To do this, we're going to be deploying some Python code as a Lambda function on AWS. This code will start/stop/list EC2 instances for us and run the [setup-ipsec-vpn](https://github.com/hwdsl2/setup-ipsec-vpn) script on them automatically. We'll use AWS [API Gateway](https://aws.amazon.com/api-gateway/) to create a RESTful API that will trigger this function. Then, we'll use Apple's [Shortcuts](https://apps.apple.com/us/app/shortcuts/id915249334) app to make an HTTP request to the API endpoint we create. Visually, this is what's going on:
 
 ![A small diagram depicting the flow of information between the different AWS services](img/workflow.png)
 
@@ -32,7 +32,7 @@ Let's get started!
 
 EC2 Launch Templates are a great way to save a frequently used EC2 launch configuration (i.e. instance type, security groups, firewall rules, storage, etc.). In our case our launch template will have all the necessary configuration necessary to deploy an EC2 instance as a VPN for us.
 
-1. Sign into your [AWS Console](https://console.aws.amazon.com) and ensure you're in the region you want to deploy your VPNs to (you can see this at the top right of the screen). In this guide we use ```us-east-1```. Head over to Services > EC2.
+1. Sign into your [AWS Console](https://console.aws.amazon.com) and ensure you're in the region you want to deploy your VPNs to (you can see this at the top right of the screen). In this guide we use ```us-east-1``` (North Virginia). Head over to Services > EC2.
 
 2. First, we'll set up a **Security Group**, which contains the firewall rules for our EC2 instance. On the left side of the page, click on "Security Groups" under "Network and Security. Click "Create Security Group".
 
@@ -46,7 +46,7 @@ EC2 Launch Templates are a great way to save a frequently used EC2 launch config
 
 5. Click "Create Key Pair" and follow the instructions (if you already have set up one, you can use that key pair instead for the remainder of this guide)
 
-6. Now we'll create our launch template. Under "Instances", click on "Launch Templates", and then "Create launch template". Give the template a name, and begin filling out the form. For the AMI, I chose one that corresponded to Ubuntu 18.04. I filled out the following details:
+6. Now we'll create our launch template. Under "Instances", click on "Launch Templates", and then "Create launch template". Give the template a name, and begin filling out the form. For the AMI, I chose one that corresponded to Ubuntu 18.04 (you can check what OS's are currently being supported by [hwdsl2/setup-ipsec-vpn](https://github.com/hwdsl2/setup-ipsec-vpn#requirements)). I filled out the following details:
 
 ```
 Instance Type: t2.micro (Free Tier eligible)
@@ -61,7 +61,7 @@ Storage (volumes): If a volume wasn't added automatically once you picked the AM
 
 ![User data to input to your template](img/user_data.png)
 
-Fill out `VPN_IPSEC_PSK`, `VPN_USER` and `VPN_PASSWORD` with an IPSec PSK, a VPN username and password. Generate these and store them in a password manager. 
+Fill out `VPN_IPSEC_PSK`, `VPN_USER` and `VPN_PASSWORD` with an IPSec PSK (should be >20 random characters), a VPN username and password. Generate these and store them in a password manager. Every time an instance is created, these credentials will be used and only the IP address will change.
 
 9. Save the launch template and note the name you gave to it. Also note the launch template ID. If you'd like to test and see if it works, you can [launch an EC2 instance based on it](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-launch-templates.html)! Follow the connection instructions [here](https://github.com/hwdsl2/setup-ipsec-vpn/blob/master/docs/clients.md) after it's been up and running for a few minutes (it can take a little bit as the script is installing/updating packages)
 
@@ -242,7 +242,7 @@ Created a new x-api-key: zgjcmuieo1
 Deployment complete!: https://bsy9qfjo7k.execute-api.us-east-1.amazonaws.com/dev
 ```
 
-5. That URL is actually our endpoint URL! We'll be making requests to it soon. As you can see from the last step, an API Key was created for our project, but it hasn't been associated with our endpoint yet. Let's secure that now. Sign into your AWS Console > API Gateway. You should see your project listed as an API! If not, ensure your region is set to the one you used in `zappa_settings.json`. Click on it, and then click on Usage Plans.
+5. That URL is actually part of our endpoint URL! We'll be making requests to it soon. As you can see from the last step, an API Key was created for our project, but it hasn't been associated with our endpoint yet. Let's secure that now. Sign into your AWS Console > API Gateway. You should see your project listed as an API! If not, ensure your region is set to the one you used in `zappa_settings.json`. Click on it, and then click on Usage Plans.
 
 6. Create a new usage plan (it can be named whatever you want), and enable throttling. I keep mine restrictive since I'm the only one supposed to be using it anyway: at 1 request per second and 1000 per month. Hit "Next."
 
