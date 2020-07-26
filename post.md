@@ -4,6 +4,8 @@ Sometimes you need a VPN for a short period of time (like when you'll be on publ
 
 ![Asking Siri to create a VPN for me, then returning the VPN's IP address to connect to](img/siri-demo.gif)
 
+(It works on iOS 13 too 😊)
+
 To do this, we're going to be deploying some Python code as a Lambda function with AWS. This code will start/stop EC2 instances for us and run the [setup-ipsec-vpn](https://github.com/hwdsl2/setup-ipsec-vpn) script on them automatically. We'll use AWS [API Gateway](https://aws.amazon.com/api-gateway/) to create a RESTful API that will trigger this function. Then, we'll use Apple's [Shortcuts](https://apps.apple.com/us/app/shortcuts/id915249334) app to make a request to the API endpoint we create. 
 
 ## What you need:
@@ -18,7 +20,7 @@ To do this, we're going to be deploying some Python code as a Lambda function wi
 
 * **About AWS charges:** Some of the services used in this post are intended to fall within the free tier usage, however some do not. Lambda offers 1 million Lambda requests every month even once your free-tier access expires, while API Gateway only offers 1 million requests per month for the first year, and EC2 offers 750 hours per month on t2.micro instances (what we're using) for the first year. Make sure to review pricing for [Lambda](https://aws.amazon.com/lambda/pricing/), [API Gateway](https://aws.amazon.com/api-gateway/pricing/) and [EC2](https://aws.amazon.com/ec2/pricing/on-demand/) before continuing. Also, as we test things out in this tutorial, do keep an eye on your AWS console to make sure anything you created to test with gets deleted to avoid incurring extra charges.
 
-* This is more of a proof-of-concept than anything else! I'd welcome any feedback on how to make it more secure in the future.
+* This is more of a proof-of-concept than anything else! I'd welcome any feedback on how to make it more secure or user-friendly in the future.
 
 Let's get started!
 
@@ -26,7 +28,7 @@ Let's get started!
 
 EC2 Launch Templates are a great way to save a frequently used EC2 launch configuration (i.e. instance type, security groups, firewall rules, storage, etc.). In our case our launch template will have all the necessary configuration necessary to deploy an EC2 instance as a VPN for us.
 
-1. Sign into your [AWS Console](https://console.aws.amazon.com) and ensure you're in the region you want to deploy your VPNs to (you can see this at the top right of the screen). In this guide we use ```us-east-1```.
+1. Sign into your [AWS Console](https://console.aws.amazon.com) and ensure you're in the region you want to deploy your VPNs to (you can see this at the top right of the screen). In this guide we use ```us-east-1```. Head over to Services > EC2.
 
 2. First, we'll set up a **Security Group**, which contains the firewall rules for our EC2 instance. On the left side of the page, click on "Security Groups" under "Network and Security. Click "Create Security Group".
 
@@ -40,13 +42,13 @@ EC2 Launch Templates are a great way to save a frequently used EC2 launch config
 
 5. Click "Create Key Pair" and follow the instructions (if you already have set up one, you can use that key pair instead for the remainder of this guide)
 
-6. Now we'll create our launch template. Under "Instances", click on "Launch Templates", and then "Create launch template". Give the template a name, and begin filling out the form. For the AMI, I chose one that corresponded to Ubuntu 20.04. I filled out the following details:
+6. Now we'll create our launch template. Under "Instances", click on "Launch Templates", and then "Create launch template". Give the template a name, and begin filling out the form. For the AMI, I chose one that corresponded to Ubuntu 18.04. I filled out the following details:
 
 ```
 Instance Type: t2.micro (Free Tier eligible)
 Key pair: The key pair you created in step (5)
 Security groups: The security group you created in step (3)
-Storage (volumes): Click "Add new volume". Make sure "Delete on termination" is set to Yes, and leave everything else at default.
+Storage (volumes): If a volume wasn't added automatically once you picked the AMI, click "Add new volume". Make sure "Delete on termination" is set to Yes, and leave everything else at default.
 ```
 
 7. Under "Resource tags", click "Add tag" and set a key of `instance_type` to `vpn`. Leave "Resource types" at its default (should have "Instances" selected). This will cause EC2 instances deployed with this template to be tagged, which lets us keep them separate from other instances and let our Lambda function terminate the right instance.
@@ -57,7 +59,7 @@ Storage (volumes): Click "Add new volume". Make sure "Delete on termination" is 
 
 Fill out `VPN_IPSEC_PSK`, `VPN_USER` and `VPN_PASSWORD` with an IPSec PSK, a VPN username and password. Generate these and store them in a password manager. 
 
-9. Save the launch template and note the name you gave to it. Also note the launch template ID. If you'd like to test and see if it works, you can [launch an EC2 instance based on it](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-launch-templates.html)! Follow the connection instructions [here](https://github.com/hwdsl2/setup-ipsec-vpn/blob/master/docs/clients.md) after it's been up and running for a few minutes. 
+9. Save the launch template and note the name you gave to it. Also note the launch template ID. If you'd like to test and see if it works, you can [launch an EC2 instance based on it](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-launch-templates.html)! Follow the connection instructions [here](https://github.com/hwdsl2/setup-ipsec-vpn/blob/master/docs/clients.md) after it's been up and running for a few minutes (it can take a little bit as the script is installing/updating packages)
 
 Otherwise, let's move on to the Lambda part of the project!
 
@@ -93,10 +95,7 @@ For Lambda to be able to perform EC2 actions on your behalf (starting servers up
 			"Condition": {
 				"ArnLike": {
 					"ec2:LaunchTemplate": "arn:aws:ec2:AWS_REGION:ACCOUNT_ID:launch-template/LAUNCH_TEMPLATE_ID"
-				},
-				"Bool": {
-          "ec2:IsLaunchTemplateResource": "true"
-        }
+				}
 			}
 		},
 		{
@@ -131,11 +130,13 @@ For Lambda to be able to perform EC2 actions on your behalf (starting servers up
 
 Fill in the `AWS_REGION`, `ACCOUNT_ID` and `LAUNCH_TEMPLATE_ID` with the AWS region you made your EC2 launch template in (for example, I used `us-east-1`), your AWS account ID (numeric) and your launch template ID from the last section.
 
-This policy allows your function to describe details about any EC2 instance, create new instances *only* from your launch template, create tags on any instance, and only start/stop/terminate instances tagged as VPNs. For more examples of policies if you're interested (as they relate to EC2 instances), [Amazon's docs](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ExamplePolicies_EC2.html#iam-example-runinstances) have a wealth of info.
+This policy allows your function to describe details about any EC2 instance, create new instances when your launch template was specified, create tags on an instance during its creation, and only start/stop/terminate instances tagged as VPNs. For more examples of policies if you're interested (as they relate to EC2 instances), [Amazon's docs](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ExamplePolicies_EC2.html#iam-example-runinstances) have a wealth of info. With this policy, any parameters in your launch template *can* be overridden at launch time (ideally you'd want to lock this down further).
+
+2. Click "Review policy" and give your policy a name. Then click "Create policy" to save the policy.
 
 ### Creating a test IAM user with the IAM policy
 
-This step is technically optional, but it allows you to test out the code locally before deploying. Here we'll create an IAM *user* and attach our *policy* to it. 
+This step allows us to test out the code locally before deploying. Here we'll create an IAM *user* and attach our *policy* to it. 
 
 1. Log in to your AWS Console > Services > IAM. Select "Users" from the sidebar, and click "Add user".
 
@@ -281,13 +282,15 @@ $ curl -H "x-api-key: api_key_here" -X DELETE https://bsy9qfjo7k.execute-api.us-
 {"instances_terminated":1,"region":"us-east-1"}
 ```
 
+If ever you want to remove everything (delete the endpoint, Lambda function and so on), you can run `zappa undeploy dev` from the project directory (or just remove from the AWS Console directly).
+
 ## Making use of our API with Shortcuts
 
 Since we've created a web service, technically anything capable of making an HTTP request (and passing headers for our API key) should be able to trigger our function. For this guide, we'll use [Shortcuts](https://apps.apple.com/us/app/shortcuts/id915249334), an iOS app by Apple. Of the many actions Shortcuts has, "Get Contents of URL" is the primary workhorse we'll be using as it can make arbitrary HTTP requests and output the results. I've made 3 shortcuts for you to use and look through how they work. Click on them to install the shortcut on your iOS device (it'll ask a few questions on import like what your endpoint URL and API key are) and review what they do before running them. 
 
 * [Start EC2 VPN](https://www.icloud.com/shortcuts/1b8b413d86a344aabde5930c5efc05f3): This will make a POST request to your endpoint to start a new server up. If successful, it will copy the server's IP to your clipboard.
 * [List running VPNs](https://www.icloud.com/shortcuts/a59e74bd60fc4af49a2d71738756bbd5): This will make a GET request to your endpoint, and afterwards return the number of servers running (should at most be 1) and copy the IP address to your clipboard.
-* [Terminate EC2 VPN](https://www.icloud.com/shortcuts/0fe871b3e1f84834a12d6af9a15e2eea): This will terminate all VPN instances running in a given region, and tell you how many instances were terminated.
+* [Terminate EC2 VPN](https://www.icloud.com/shortcuts/eb95f06e7f5e4ecaa292e1639530b233): This will terminate all VPN instances running in a given region, and tell you how many instances were terminated.
 
 To get Siri up and running, simply tell Siri to "Run Shortcut Name", for example "Run Start EC2 VPN" to launch a new VPN.
 

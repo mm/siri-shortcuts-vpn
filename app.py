@@ -1,6 +1,7 @@
 import os
 
 import boto3
+from botocore.exceptions import ClientError
 from flask import Flask, jsonify, request
 from dotenv import load_dotenv
 
@@ -14,16 +15,25 @@ if not os.getenv('AWS_EXECUTION_ENV'):
 
 app = Flask(__name__)
 
+@app.errorhandler(ClientError)
+def handle_boto_client_error(e):
+    """Error handling to alert user if IAM policy hasn't
+    been set up properly
+    """
+    # Get response code:
+    code = e.response['Error']['Code']
+    if code == "UnauthorizedOperation":
+        return jsonify(error="Your user or role didn't have the right permissions to perform that action: check your IAM policy!")
+    else:
+        return jsonify(error=f"AWS Client Error: {code}")
+
+
 @app.route('/instances/<string:region>', methods=['GET', 'POST', 'DELETE'])
 def manage_instances(region):
     # Build a list of valid AWS regions (e.g us-east-1) for EC2.
-    # These will be validated for every request
-    try:
-        region_response = boto3.client('ec2').describe_regions()
-        aws_regions = [endpoint['RegionName'] for endpoint in region_response['Regions']]
-    except Exception as e:
-        print('Error retrieving list of valid AWS regions -- did you attach the correct IAM policy?')
-        return jsonify(error='Error discovering valid AWS regions: please check IAM policy'), 500
+    # These will be validated for every request:
+    region_response = boto3.client('ec2').describe_regions()
+    aws_regions = [endpoint['RegionName'] for endpoint in region_response['Regions']]
 
     # Get the AWS region from the URL, and validate it:
     if region not in aws_regions:
@@ -32,6 +42,8 @@ def manage_instances(region):
     # uses this list so we'll factor it out):
     try:
         instances = ec2_vpn.list_instances(region=region)
+    except ClientError:
+        raise
     except Exception as e:
         print(f"Error fetching instances: {e}")
         return jsonify(error="An error occured while fetching the list of running instances"), 500

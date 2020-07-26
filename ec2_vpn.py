@@ -29,7 +29,7 @@ def launch_instance(launch_template_name, region='us-east-1'):
         return (instance_id, instance.public_ip_address)
     except Exception as e:
         print(f'Error creating instance: {e}')
-        return None
+        raise
 
 def list_instances(region='us-east-1'):
     """Returns a list of dicts describing running EC2 instances
