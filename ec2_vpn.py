@@ -1,5 +1,10 @@
+"""Functions to handle listing, running and terminating EC2 instances
+for VPN usage.
+"""
+
 import boto3
 import time
+from botocore.exceptions import ClientError
 
 def launch_instance(launch_template_name, region='us-east-1'):
     """Launches an EC2 instance purposed for an on-the-fly VPN,
@@ -27,9 +32,11 @@ def launch_instance(launch_template_name, region='us-east-1'):
         time.sleep(2)  # As it turns out, sometimes it takes time for an IP to be assigned
         instance = boto3.resource('ec2', region_name=region).Instance(instance_id)
         return (instance_id, instance.public_ip_address)
+    except ClientError:
+        raise  # will be handled by app.py's exception handler
     except Exception as e:
         print(f'Error creating instance: {e}')
-        raise
+        return None
 
 def list_instances(region='us-east-1'):
     """Returns a list of dicts describing running EC2 instances

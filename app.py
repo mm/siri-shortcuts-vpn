@@ -43,9 +43,9 @@ def manage_instances(region):
     try:
         instances = ec2_vpn.list_instances(region=region)
     except ClientError:
+        # We can re-raise this because our exception handler will catch it
         raise
-    except Exception as e:
-        print(f"Error fetching instances: {e}")
+    except Exception:
         return jsonify(error="An error occured while fetching the list of running instances"), 500
     
     # This should correspond to a valid EC2 launch template in the region of interest:
@@ -54,31 +54,25 @@ def manage_instances(region):
     if request.method == 'GET':
         # If we receive a GET request, then list
         # all the currently running instances (shouldn't
-        # be > 1 in a region
+        # be > 1 in a region)
         return jsonify(region=region, running_instances=instances)
     elif request.method == 'POST':
         # Start up a new instance:
         if not template:
-            return jsonify(
-                error="Please set the LAUNCH_TEMPLATE_NAME Lambda environment variable first."
-            ), 500
+            return jsonify(error="Please set the LAUNCH_TEMPLATE_NAME Lambda environment variable first."), 500
         
         if len(instances) == 0:
             new_instance = ec2_vpn.launch_instance(template, region=region)
-            return jsonify(
-                region=region,
-                instance_id=new_instance[0],
-                ip=new_instance[1]
-            ), 200
+            if new_instance:
+                return jsonify(region=region, instance_id=new_instance[0], ip=new_instance[1]), 200
+            else:
+                return jsonify(error="Unknown error while creating EC2 instance"), 500
         else:
             return jsonify(error=f"An instance is already running in the {region} region. Please terminate it first"), 429
     elif request.method == 'DELETE':
         # We've received a DELETE request, so terminate any VPN EC2 instances:
         instances_removed = ec2_vpn.terminate_instances(region=region)
-        return jsonify(
-            region=region,
-            instances_terminated=instances_removed
-        )
+        return jsonify(region=region, instances_terminated=instances_removed)
     else:
         return jsonify(error="Method not implemented"), 501
 
