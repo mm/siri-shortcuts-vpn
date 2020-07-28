@@ -1,4 +1,4 @@
-# Tutorial: VPN on demand with Siri, Shortcuts, Python, AWS EC2 & Lambda
+# Tutorial: VPN on Demand with Siri, Shortcuts, Python, AWS EC2 & Lambda
 
 Sometimes you need a VPN for a short period of time (like when you'll be on public Wi-Fi for a little while). [Amazon EC2](https://aws.amazon.com/ec2/) makes deploying servers to be used as VPNs for this purpose pretty simple and cost-effective since you're only charged from the time you start until the instance's termination. Open-source projects like [hwdsl2/setup-ipsec-vpn](https://github.com/hwdsl2/setup-ipsec-vpn) make this even easier. However, this requires you to get onto the AWS Console to get everything set up, which can sometimes be a pain. The motivation for this project was to be able to do this on the go:
 
