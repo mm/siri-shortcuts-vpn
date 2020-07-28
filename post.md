@@ -1,12 +1,12 @@
-# VPN on demand with Siri, Shortcuts, Python, AWS EC2 & Lambda
+# Tutorial: VPN on demand with Siri, Shortcuts, Python, AWS EC2 & Lambda
 
-Sometimes you need a VPN for a short period of time (like when you'll be on public Wi-Fi for a little while). [Amazon EC2](https://aws.amazon.com/ec2/) makes deploying servers to be used as VPNs for this purpose pretty simple and cost-effective since you're only charged from the time you start until the instance's termination. Open-source projects like [hwdsl2/setup-ipsec-vpn](https://github.com/hwdsl2/setup-ipsec-vpn) make this even easier. However, this requires you to get onto the AWS Console to get everything set up, which can be a bit of a pain. The motivation for this project was to be able to do this:
+Sometimes you need a VPN for a short period of time (like when you'll be on public Wi-Fi for a little while). [Amazon EC2](https://aws.amazon.com/ec2/) makes deploying servers to be used as VPNs for this purpose pretty simple and cost-effective since you're only charged from the time you start until the instance's termination. Open-source projects like [hwdsl2/setup-ipsec-vpn](https://github.com/hwdsl2/setup-ipsec-vpn) make this even easier. However, this requires you to get onto the AWS Console to get everything set up, which can sometimes be a pain. The motivation for this project was to be able to do this on the go:
 
 ![Asking Siri to create a VPN for me, then returning the VPN's IP address to connect to](img/siri-demo.gif)
 
 (It works on iOS 13 too 😊)
 
-To do this, we're going to be deploying some Python code as a Lambda function on AWS. This code will start/stop/list EC2 instances for us and run the [setup-ipsec-vpn](https://github.com/hwdsl2/setup-ipsec-vpn) script on them automatically. We'll use AWS [API Gateway](https://aws.amazon.com/api-gateway/) to create a RESTful API that will trigger this function. Then, we'll use Apple's [Shortcuts](https://apps.apple.com/us/app/shortcuts/id915249334) app to make an HTTP request to the API endpoint we create. Visually, this is what's going on:
+To make this work, we're going to be deploying some Python code as a Lambda function on AWS. This code will start/stop/list EC2 instances for us based on an EC2 template we'll create. This template will run the [setup-ipsec-vpn](https://github.com/hwdsl2/setup-ipsec-vpn) script on new instances automatically. We'll use [AWS API Gateway](https://aws.amazon.com/api-gateway/) to create a RESTful API that will trigger the Lambda function. Finally, we'll use Apple's [Shortcuts](https://apps.apple.com/us/app/shortcuts/id915249334) app to make an HTTP request to the API endpoint we create. Visually, this is what's going on:
 
 ![A small diagram depicting the flow of information between the different AWS services](img/workflow.png)
 
@@ -20,11 +20,11 @@ To do this, we're going to be deploying some Python code as a Lambda function on
 
 ## Limitations/Disclaimer
 
-* The Python function will limit you to deploying only in one AWS region at a time, since EC2 Launch Templates (which we'll use) are tied to a region. Here we use `us-east-1` as our region.
+* You'll be limited to deploying only in one AWS region at a time, since EC2 Launch Templates are tied to a region. In this tutorial, we use `us-east-1` as our region.
 
-* **About AWS charges:** Some of the services used in this post are intended to fall within the free tier usage, however some do not. Lambda offers 1 million Lambda requests every month even once your free-tier access expires, while API Gateway only offers 1 million requests per month for the first year, and EC2 offers 750 hours per month on t2.micro instances (what we're using) for the first year. Make sure to review pricing for [Lambda](https://aws.amazon.com/lambda/pricing/), [API Gateway](https://aws.amazon.com/api-gateway/pricing/) and [EC2](https://aws.amazon.com/ec2/pricing/on-demand/) before continuing. Also, as we test things out in this tutorial, do keep an eye on your AWS console to make sure anything you created to test with gets deleted to avoid incurring extra charges.
+* **About AWS charges:** Some of the services used in this post are intended to fall within the free tier usage, however some do not. Lambda offers 1 million Lambda requests every month even once your free-tier access expires, while API Gateway only offers 1 million requests per month for the first year, and EC2 offers 750 hours per month on t2.micro instances (what we're using) for the first year. Make sure to review pricing for [Lambda](https://aws.amazon.com/lambda/pricing/), [API Gateway](https://aws.amazon.com/api-gateway/pricing/) and [EC2](https://aws.amazon.com/ec2/pricing/on-demand/) before continuing. Also, as we test things out in this tutorial, keep an eye on your AWS console to make sure anything you created to test with gets deleted to avoid incurring extra charges.
 
-* This is more of a proof-of-concept than anything else! I'd welcome any feedback on how to make it more secure or user-friendly in the future.
+* This is more of a demo so far than anything else! I'd love any feedback on how to make it more secure or user-friendly in the future.
 
 Let's get started!
 
@@ -32,7 +32,7 @@ Let's get started!
 
 EC2 Launch Templates are a great way to save a frequently used EC2 launch configuration (i.e. instance type, security groups, firewall rules, storage, etc.). In our case our launch template will have all the necessary configuration necessary to deploy an EC2 instance as a VPN for us.
 
-1. Sign into your [AWS Console](https://console.aws.amazon.com) and ensure you're in the region you want to deploy your VPNs to (you can see this at the top right of the screen). In this guide we use ```us-east-1``` (North Virginia). Head over to Services > EC2.
+1. Sign into your [AWS Console](https://console.aws.amazon.com) and ensure you're in the region you want to deploy your VPNs to (you can see this at the top right of the screen). In this guide we use `us-east-1` (North Virginia). Head over to Services > EC2.
 
 2. First, we'll set up a **Security Group**, which contains the firewall rules for our EC2 instance. On the left side of the page, click on "Security Groups" under "Network and Security. Click "Create Security Group".
 
@@ -55,7 +55,7 @@ Security groups: The security group you created in step (3)
 Storage (volumes): If a volume wasn't added automatically once you picked the AMI, click "Add new volume". Make sure "Delete on termination" is set to Yes, and leave everything else at default.
 ```
 
-7. Under "Resource tags", click "Add tag" and set a key of `instance_type` to `vpn`. Leave "Resource types" at its default (should have "Instances" selected). This will cause EC2 instances deployed with this template to be tagged, which lets us keep them separate from other instances and let our Lambda function terminate the right instance.
+7. Under "Resource tags", click "Add tag" and set a key of `instance_type` to `vpn`. Leave "Resource types" at its default (should have "Instances" selected). This will cause EC2 instances deployed with this template to be tagged, which lets us keep them separate from other instances and makes sure our Lambda function terminates the right instance when asked to.
 
 8. Under "Advanced details", scroll to "User data". This is where we'll put the script from [hwdsl2/setup-ipsec-vpn](https://github.com/hwdsl2/setup-ipsec-vpn#installation) in. Make sure to put `#!/bin/bash` at the top of the script since this is being executed in a Bash shell. It's executed when your instance is booted for the first time. To find out more about User Data, check the [Amazon docs](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/user-data.html#user-data-shell-scripts) on it.
 
@@ -71,13 +71,13 @@ Otherwise, let's move on to the Lambda part of the project!
 
 [Amazon Lambda](https://aws.amazon.com/lambda/) is a service that allows you to write code and execute it using various triggers (here we use an HTTP request). What's so neat about it is you're only charged for the time and resources your code uses while it runs, saving quite a bit. Here, we're using some Python code to automatically launch an EC2 instance based on the template we defined above (or terminate/list instances).
 
-I've already written the code and you can check it out on [GitHub here](https://github.com/mm/siri-shortcuts-vpn). It uses the [Flask](https://flask.palletsprojects.com/en/1.1.x/) framework to define a tiny API that can receive HTTP requests and act on them accordingly. We'll package this up and deploy it as a Lambda function with the popular [Zappa](https://github.com/Miserlou/Zappa) package a little later.
+I've already written the code and you can check it out on [GitHub here](https://github.com/mm/siri-shortcuts-vpn). It uses the [Flask](https://flask.palletsprojects.com/en/1.1.x/) framework to define a tiny API that can receive HTTP requests and act on them accordingly. We'll package this up and deploy it as a Lambda function with the popular [Zappa](https://github.com/Miserlou/Zappa) package a little later. Before that, we need to ensure our function will have the right permissions and make sure it works locally!
 
 ### Creating the necessary IAM policy
 
 For Lambda to be able to perform EC2 actions on your behalf (starting servers up, shutting them down...) it needs permissions to do so. When using AWS, we define these permissions by an [IAM policy](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html). We'll set one up here:
 
-1. Log in to your AWS Console > Services > IAM. Select "Policies" from the sidebar, and then "Create policy". Switch from the visual editor to JSON mode and paste this policy in:
+1. Log in to your AWS Console > Services > IAM. Select "Policies" from the sidebar, and then "Create policy". Switch from the visual editor to JSON mode and replace the policy in the text editor with the following:
 
 ```json
 {
@@ -158,14 +158,14 @@ With all of the policy setup out of the way, we're ready to go! Now, we'll deplo
 
 3. I recommend setting up a [virtual environment](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/) for this project to keep its dependencies/versions of those dependencies separate from other projects. 
 
-4. Install the packages this code relies on: `pip install -r requirements.txt`
+4. Once in the project folder, with your virtual environment activated, install the packages this code relies on: `pip install -r requirements.txt`
 
-5. Create an `.env` file at the root level of the project and fill in the following environment variables. This will allow you to simulate using the IAM policy you created in tutorial to ensure it works before deploying.
+5. Create an `.env` file in the root folder of the project and fill in the following environment variables. This will allow you to simulate using the IAM policy you created in tutorial to ensure it works before deploying.
 
 ```
-AWS_ACCESS_KEY_ID=ACCESS_KEY_ID_YOU_JUST_CREATED
-AWS_SECRET_ACCESS_KEY=SECRET_ACCESS_KEY_YOU_JUST_CREATED
-AWS_DEFAULT_REGION=fill_in_your_aws_region_here
+AWS_ACCESS_KEY_ID=access_key_id_you_just_created
+AWS_SECRET_ACCESS_KEY=secret_access_key_you_just_created
+AWS_DEFAULT_REGION=fill_in_your_aws_region_here_(e.g us-east-1)
 LAUNCH_TEMPLATE_NAME=fill_in_your_launch_template_name_here
 ```
 
@@ -226,10 +226,10 @@ For deployment, we could totally wrap up our Flask app ourselves and set up API 
         "project_name": "siri-shortcuts-",
         "runtime": "python3.8",
 		"s3_bucket": "zappa-9bh21r44r",
-		"api_key_required": true,
-		"aws_environment_variables": {
-			"LAUNCH_TEMPLATE_NAME": "Your launch template name here"
-		}
+        "api_key_required": true,
+        "aws_environment_variables": {
+	        "LAUNCH_TEMPLATE_NAME": "Your launch template name here (not ID)"
+        }
     }
 }
 ```
@@ -242,7 +242,7 @@ Created a new x-api-key: zgjcmuieo1
 Deployment complete!: https://bsy9qfjo7k.execute-api.us-east-1.amazonaws.com/dev
 ```
 
-5. That URL is actually part of our endpoint URL! We'll be making requests to it soon. As you can see from the last step, an API Key was created for our project, but it hasn't been associated with our endpoint yet. Let's secure that now. Sign into your AWS Console > API Gateway. You should see your project listed as an API! If not, ensure your region is set to the one you used in `zappa_settings.json`. Click on it, and then click on Usage Plans.
+5. That URL in the Zappa output is actually part of our endpoint URL! We'll be making requests to it soon. As you can see from the last step, an API Key was created for our project, but it hasn't been associated with our endpoint yet. Let's secure that now. Sign into your AWS Console > API Gateway. You should see your project listed as an API! If not, ensure your region is set to the one you used in `zappa_settings.json`. Click on it, and then click on Usage Plans.
 
 6. Create a new usage plan (it can be named whatever you want), and enable throttling. I keep mine restrictive since I'm the only one supposed to be using it anyway: at 1 request per second and 1000 per month. Hit "Next."
 
@@ -274,7 +274,7 @@ $ curl -H "x-api-key: api_key_here" -X POST https://bsy9qfjo7k.execute-api.us-ea
 {"instance_id":"i-09912cc4f30e020d7","ip":"54.236.255.219","region":"us-east-1"}
 ```
 
-Note that if you try and run this when a VPN is already running, the function will return a 429 - Too Many Requests response instead. This is to prevent accidentally starting too many instances up and incurring charges.
+Note that if you try and run this when a VPN is already running, the function will return a 429 - Too Many Requests response instead. This is to prevent accidentally starting too many instances up and incurring additional charges.
 
 To connect to your instance, wait a few minutes and then follow [this guide](https://github.com/hwdsl2/setup-ipsec-vpn/blob/master/docs/clients.md). Use the IP address your function outputs, as well as the key, username and password you set way back when you made the EC2 launch template! You should have an up and running VPN.
 
@@ -288,14 +288,16 @@ $ curl -H "x-api-key: api_key_here" -X DELETE https://bsy9qfjo7k.execute-api.us-
 
 If ever you want to remove everything (delete the endpoint, Lambda function and so on), you can run `zappa undeploy dev` from the project directory (or just remove from the AWS Console directly).
 
-## Making use of our API with Shortcuts
+## Making use of our API with Shortcuts and Siri
 
-Since we've created a web service, technically anything capable of making an HTTP request (and passing headers for our API key) should be able to trigger our function. For this guide, we'll use [Shortcuts](https://apps.apple.com/us/app/shortcuts/id915249334), an iOS app by Apple. Of the many actions Shortcuts has, "Get Contents of URL" is the primary workhorse we'll be using as it can make arbitrary HTTP requests and output the results. I've made 3 shortcuts for you to use and look through how they work. Click on them to install the shortcut on your iOS device (it'll ask a few questions on import like what your endpoint URL and API key are) and review what they do before running them. 
+Since we've created a web service, technically anything capable of making an HTTP request (and passing headers for our API key) should be able to trigger our function. For this guide, we'll use [Shortcuts](https://apps.apple.com/us/app/shortcuts/id915249334), an iOS app by Apple. Of the many actions Shortcuts has, "Get Contents of URL" is the primary workhorse we'll be using as it can make arbitrary HTTP requests and output the results. I've made 3 shortcuts for you to use and look through how they work. Click on them to install the shortcut on your iOS device (it'll ask a few questions on import like what your endpoint URL and API key are) and review what they do before running them. You might have to change your device's settings to allow untrusted shortcuts to run.
 
 * [Start EC2 VPN](https://www.icloud.com/shortcuts/1b8b413d86a344aabde5930c5efc05f3): This will make a POST request to your endpoint to start a new server up. If successful, it will copy the server's IP to your clipboard.
 * [List running VPNs](https://www.icloud.com/shortcuts/a59e74bd60fc4af49a2d71738756bbd5): This will make a GET request to your endpoint, and afterwards return the number of servers running (should at most be 1) and copy the IP address to your clipboard.
-* [Terminate EC2 VPN](https://www.icloud.com/shortcuts/eb95f06e7f5e4ecaa292e1639530b233): This will terminate all VPN instances running in a given region, and tell you how many instances were terminated.
+* [Terminate EC2 VPN](https://www.icloud.com/shortcuts/eb95f06e7f5e4ecaa292e1639530b233): This will terminate all VPN instances (with a DELETE request) running in a given region, and tell you how many instances were terminated.
 
-To get Siri up and running, simply tell Siri to "Run Shortcut Name", for example "Run Start EC2 VPN" to launch a new VPN.
+To get Siri up and running, simply tell Siri to "Run Shortcut Name", for example "Run Start EC2 VPN" to launch a new VPN. I'd give the server some time before trying to connect to it (in my tests one took close to 5 minutes once). You can follow the instructions at [hwdsl2/setup-ipsec-vpn](https://github.com/hwdsl2/setup-ipsec-vpn/blob/master/docs/clients.md) to get connected!
 
 That's all there is to it! Thanks for checking out this tutorial/demonstration; it's been helpful for me in the past and was fun to try out so I hope it helps you too! This is one of the first technical tutorials I've written publicly, so I'd really appreciate any feedback you have!
+
+Huge thanks to [Lin Song](https://github.com/hwdsl2) for writing the setup-ipsec-vpn setup script our template uses! 😊
