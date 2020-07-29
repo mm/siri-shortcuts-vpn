@@ -59,9 +59,11 @@ Storage (volumes): If a volume wasn't added automatically once you picked the AM
 
 8. Under "Advanced details", scroll to "User data". This is where we'll put the script from [hwdsl2/setup-ipsec-vpn](https://github.com/hwdsl2/setup-ipsec-vpn#installation) in. Make sure to put `#!/bin/bash` at the top of the script since this is being executed in a Bash shell. It's executed when your instance is booted for the first time. To find out more about User Data, check the [Amazon docs](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/user-data.html#user-data-shell-scripts) on it.
 
-![User data to input to your template](img/user_data.png)
+	![User data to input to your template](img/user_data.png)
 
-Fill out `VPN_IPSEC_PSK`, `VPN_USER` and `VPN_PASSWORD` with an IPSec PSK (should be >20 random characters), a VPN username and password. Generate these and store them in a password manager. Every time an instance is created, these credentials will be used and only the IP address will change.
+	Fill out `VPN_IPSEC_PSK`, `VPN_USER` and `VPN_PASSWORD` with an IPSec PSK (should be >20 random characters), a VPN username and password. Generate these and store them in a password manager. Every time an instance is created, these credentials will be used and only the IP address will change.
+
+    > _Note_: More secure than using user data here may be to have this shell script in a secured S3 bucket accessed at launch time or pass the user data at launch time with Lambda, pulling credentials from Lambda environment variables.
 
 9. Save the launch template and note the name you gave to it. Also note the launch template ID. If you'd like to test and see if it works, you can [launch an EC2 instance based on it](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-launch-templates.html)! Follow the connection instructions [here](https://github.com/hwdsl2/setup-ipsec-vpn/blob/master/docs/clients.md) after it's been up and running for a few minutes (it can take a little bit as the script is installing/updating packages)
 
@@ -79,58 +81,58 @@ For Lambda to be able to perform EC2 actions on your behalf (starting servers up
 
 1. Log in to your AWS Console > Services > IAM. Select "Policies" from the sidebar, and then "Create policy". Switch from the visual editor to JSON mode and replace the policy in the text editor with the following:
 
-```json
-{
-	"Version": "2012-10-17",
-	"Statement": [
-		{
-			"Sid": "VisualEditor0",
-			"Effect": "Allow",
-			"Action": "ec2:Describe*",
-			"Resource": "*"
-		},
-		{
-			"Effect": "Allow",
-			"Action": [
-				"ec2:RunInstances",
-				"ec2:CreateTags"
-			],
-			"Resource": "*",
-			"Condition": {
-				"ArnLike": {
-					"ec2:LaunchTemplate": "arn:aws:ec2:AWS_REGION:ACCOUNT_ID:launch-template/LAUNCH_TEMPLATE_ID"
+	```json
+	{
+		"Version": "2012-10-17",
+		"Statement": [
+			{
+				"Sid": "VisualEditor0",
+				"Effect": "Allow",
+				"Action": "ec2:Describe*",
+				"Resource": "*"
+			},
+			{
+				"Effect": "Allow",
+				"Action": [
+					"ec2:RunInstances",
+					"ec2:CreateTags"
+				],
+				"Resource": "*",
+				"Condition": {
+					"ArnLike": {
+						"ec2:LaunchTemplate": "arn:aws:ec2:AWS_REGION:ACCOUNT_ID:launch-template/LAUNCH_TEMPLATE_ID"
+					}
+				}
+			},
+			{
+				"Sid": "VisualEditor2",
+				"Effect": "Allow",
+				"Action": "ec2:CreateTags",
+				"Resource": "arn:aws:ec2:*:ACCOUNT_ID:instance/*",
+				"Condition": {
+					"StringEquals": {
+						"ec2:CreateAction": "RunInstances"
+					}
+				}
+			},
+			{
+				"Sid": "VisualEditor3",
+				"Effect": "Allow",
+				"Action": [
+					"ec2:TerminateInstances",
+					"ec2:StartInstances",
+					"ec2:StopInstances"
+				],
+				"Resource": "*",
+				"Condition": {
+					"StringEquals": {
+						"ec2:ResourceTag/instance_type": "vpn"
+					}
 				}
 			}
-		},
-		{
-			"Sid": "VisualEditor2",
-			"Effect": "Allow",
-			"Action": "ec2:CreateTags",
-			"Resource": "arn:aws:ec2:*:ACCOUNT_ID:instance/*",
-			"Condition": {
-				"StringEquals": {
-					"ec2:CreateAction": "RunInstances"
-				}
-			}
-		},
-		{
-			"Sid": "VisualEditor3",
-			"Effect": "Allow",
-			"Action": [
-				"ec2:TerminateInstances",
-				"ec2:StartInstances",
-				"ec2:StopInstances"
-			],
-			"Resource": "*",
-			"Condition": {
-				"StringEquals": {
-					"ec2:ResourceTag/instance_type": "vpn"
-				}
-			}
-		}
-	]
-}
-```
+		]
+	}
+	```
 
 Fill in the `AWS_REGION`, `ACCOUNT_ID` and `LAUNCH_TEMPLATE_ID` with the AWS region you made your EC2 launch template in (for example, I used `us-east-1`), your AWS account ID (numeric) and your launch template ID from the last section.
 
@@ -162,26 +164,26 @@ With all of the policy setup out of the way, we're ready to go! Now, we'll deplo
 
 5. Create an `.env` file in the root folder of the project and fill in the following environment variables. This will allow you to simulate using the IAM policy you created in tutorial to ensure it works before deploying.
 
-```
-AWS_ACCESS_KEY_ID=access_key_id_you_just_created
-AWS_SECRET_ACCESS_KEY=secret_access_key_you_just_created
-AWS_DEFAULT_REGION=fill_in_your_aws_region_here_(e.g us-east-1)
-LAUNCH_TEMPLATE_NAME=fill_in_your_launch_template_name_here
-```
+	```
+	AWS_ACCESS_KEY_ID=access_key_id_you_just_created
+	AWS_SECRET_ACCESS_KEY=secret_access_key_you_just_created
+	AWS_DEFAULT_REGION=fill_in_your_aws_region_here_(e.g us-east-1)
+	LAUNCH_TEMPLATE_NAME=fill_in_your_launch_template_name_here
+	```
 
 6. If everything is in order, you should be able to run `python3 app.py` in the root directory to start up the Flask development server. Look out for the command's output. By default, the server will be listening for connections on port 5000.
 
 7. Try making HTTP requests to your server! You can use cURL, [httpie](https://httpie.org), [Paw](https://paw.cloud), [Postman](https://www.postman.com) or any API testing tool you'd like. For example, if I was trying to deploy instances in the US-East-1 region (and that's where my launch template was stored), with cURL I'd make this request to try starting up:
 
-```console
-$ curl -X POST http://localhost:5000/instances/us-east-1
-```
+	```console
+	$ curl -X POST http://localhost:5000/instances/us-east-1
+	```
 
-If successful I should get a response like this:
+	If successful I should get a response like this:
 
-```
-{"instance_id":"i-some-instance-id","ip":"<some ip address>","region":"us-east-1"}
-```
+	```
+	{"instance_id":"i-some-instance-id","ip":"<some ip address>","region":"us-east-1"}
+	```
 
 Getting running instances can be done via a GET request (i.e. ```curl -X GET http://localhost:5000/instances/us-east-1```) and terminating instances in a region can be done via a DELETE request (```curl -X DELETE http://localhost:5000/instances/us-east-1```). The code attempts to make sure only 1 instance is running at a time (to protect against accidentally starting many instances at once) -- so DELETE works as intended (deletes the whole collection of instances, but that collection is only supposed to contain 1 instance at a time).
 
@@ -202,45 +204,45 @@ For deployment, we could totally wrap up our Flask app ourselves and set up API 
 
 2. Go through the setup steps and keep the default options as you go through. Open up your `zappa_settings.json` file. Mine looks like this:
 
-```json
-{
-    "dev": {
-        "app_function": "app.app",
-        "aws_region": "us-east-1",
-        "profile_name": "default",
-        "project_name": "siri-shortcuts-",
-        "runtime": "python3.8",
-        "s3_bucket": "zappa-9bh21r44r"
-    }
-}
-```
+	```json
+	{
+		"dev": {
+			"app_function": "app.app",
+			"aws_region": "us-east-1",
+			"profile_name": "default",
+			"project_name": "siri-shortcuts-",
+			"runtime": "python3.8",
+			"s3_bucket": "zappa-9bh21r44r"
+		}
+	}
+	```
 
 3. First, ensure your `aws_region` value matches the AWS region your EC2 template is located in. If not, change that (I've been using `us-east-1` throughout this tutorial). Next, we're going to add two keys: `api_key_required` (to secure our API with an API key) and another key `aws_environment_variables` to set environment variables in the Lambda environment (currently we only need one for our launch template name):
 
-```json
-{
-    "dev": {
-        "app_function": "app.app",
-        "aws_region": "us-east-1",
-        "profile_name": "default",
-        "project_name": "siri-shortcuts-",
-        "runtime": "python3.8",
-		"s3_bucket": "zappa-9bh21r44r",
-        "api_key_required": true,
-        "aws_environment_variables": {
-	        "LAUNCH_TEMPLATE_NAME": "Your launch template name here (not ID)"
-        }
-    }
-}
-```
+	```json
+	{
+		"dev": {
+			"app_function": "app.app",
+			"aws_region": "us-east-1",
+			"profile_name": "default",
+			"project_name": "siri-shortcuts-",
+			"runtime": "python3.8",
+			"s3_bucket": "zappa-9bh21r44r",
+			"api_key_required": true,
+			"aws_environment_variables": {
+				"LAUNCH_TEMPLATE_NAME": "Your launch template name here (not ID)"
+			}
+		}
+	}
+	```
 
 4. Save `zappa_settings.json`. We should be good to go! Assuming you named your stage `dev` (as in Zappa setup), you can run `zappa deploy dev` in your terminal! (Side note: Zappa supports deploying multiple stages! i.e. You could have totally different environment variables/security settings for the dev vs. prod vs. staging vs. whatever stage you want. Very cool!) This could take a few minutes while dependencies are packaged and uploaded. There should be a bunch of output. At the end, you should see something like this:
 
-```console
-Deploying API Gateway..
-Created a new x-api-key: zgjcmuieo1
-Deployment complete!: https://bsy9qfjo7k.execute-api.us-east-1.amazonaws.com/dev
-```
+	```console
+	Deploying API Gateway..
+	Created a new x-api-key: zgjcmuieo1
+	Deployment complete!: https://bsy9qfjo7k.execute-api.us-east-1.amazonaws.com/dev
+	```
 
 5. That URL in the Zappa output is actually part of our endpoint URL! We'll be making requests to it soon. As you can see from the last step, an API Key was created for our project, but it hasn't been associated with our endpoint yet. Let's secure that now. Sign into your AWS Console > API Gateway. You should see your project listed as an API! If not, ensure your region is set to the one you used in `zappa_settings.json`. Click on it, and then click on Usage Plans.
 
@@ -300,4 +302,4 @@ To get Siri up and running, simply tell Siri to "Run Shortcut Name", for example
 
 That's all there is to it! Thanks for checking out this tutorial/demonstration; it's been helpful for me in the past and was fun to try out so I hope it helps you too! This is one of the first technical tutorials I've written publicly, so I'd really appreciate any feedback you have!
 
-Huge thanks to [Lin Song](https://github.com/hwdsl2) for writing the setup-ipsec-vpn setup script our template uses! 😊
+Huge thanks to [Lin Song](https://github.com/hwdsl2) for writing the setup-ipsec-vpn setup script our template uses and documentation for connecting! 😊
