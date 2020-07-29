@@ -1,6 +1,6 @@
 # VPN on Demand with Siri, Shortcuts, Python, AWS EC2 & Lambda
 
-This is the Python code referenced in my [dev.to](https://dev.to/mmascioni/tutorial-vpn-on-demand-with-siri-shortcuts-python-aws-ec2-lambda-1fpp) post on how to launch a VPN on the fly (using AWS EC2 servers) by combining some AWS Lambda, API Gateway and Shortcuts magic (also available in [this repository](post.md)). This is more of a proof-of-concept than anything else, although it's a tool I've used myself so I wanted to make it available for everyone. Please open issues or shoot me an email with any suggestions on how to improve this further! ❤️
+This is the Python code referenced in my [dev.to](https://dev.to/mmascioni/tutorial-vpn-on-demand-with-siri-shortcuts-python-aws-ec2-lambda-i83) post on how to launch a VPN on the fly (using AWS EC2 servers) by combining some AWS Lambda, API Gateway and Shortcuts magic (also available in [this repository](post.md)). This is more of a proof-of-concept than anything else, although it's a tool I've used myself so I wanted to make it available for everyone. Please open issues or shoot me an email with any suggestions on how to improve this further! ❤️
 
 ## Using this code locally:
 
